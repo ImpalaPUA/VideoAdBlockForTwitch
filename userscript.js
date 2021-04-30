@@ -2,8 +2,8 @@
 // @name         VideoAdBlockForTwitch
 // @namespace    https://github.com/saucettv/VideoAdBlockForTwitch
 // @version      2.2
-// @updateURL    https://github.com/saucettv/VideoAdBlockForTwitch/blob/main/userscript.js
-// @downloadURL  https://github.com/saucettv/VideoAdBlockForTwitch/blob/main/userscript.js
+// @updateURL    https://raw.githubusercontent.com/saucettv/VideoAdBlockForTwitch/main/userscript.js
+// @downloadURL  https://raw.githubusercontent.com/saucettv/VideoAdBlockForTwitch/main/userscript.js
 // @description  Swaps stitched video ads for a 480p ad-free stream and returns to original quality automatically.
 // @author       sauce
 // @match        *://*.twitch.tv/*
