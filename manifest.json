@@ -1,0 +1,36 @@
+{
+  "description": "Swaps video ads for a 480p version of the stream.",
+  "manifest_version": 2,
+  "name": "Video Ad-Block, for Twitch",
+  "version": "2.2",
+
+  "icons": {
+  "48": "icons/ttv-48.png",
+  "96": "icons/ttv-96.png"
+  },
+
+  "browser_action": {
+    "default_icon": "icons/ttv-32.png",
+    "default_title": "Video Ad-Block, for Twitch",
+    "default_popup": "popup/index.html"
+  },
+
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "https://*.twitch.tv/*",
+    "https://*.amazon-adsystem.com/*","https://d2v02itv0y9u9t.cloudfront.net/dist/1.0.5/v6s.js","https://*.imrworldwide.com/*","https://countess.twitch.tv/*","https://*.scorecardresearch.com/*","https://www.googletagservices.com/tag/js/gpt.js","*://*.branch.io/*","*://comscore.com/*"
+  ],
+
+  "background": {
+    "scripts": ["background.js"]
+  },
+
+  "content_scripts": [
+   {
+    "matches": ["https://www.twitch.tv/*"],
+    "run_at": "document_start",
+    "js": ["content.js"]
+   }
+  ]
+}
