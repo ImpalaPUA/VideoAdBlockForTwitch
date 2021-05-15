@@ -1,8 +1,8 @@
 {
-  "description": "Swaps video ads for a 480p version of the stream.",
+  "description": "Swaps video ads for an ad-free stream between 1080p and 480p.",
   "manifest_version": 2,
   "name": "Video Ad-Block, for Twitch",
-  "version": "2.3",
+  "version": "2.4",
 
   "icons": {
   "48": "icons/ttv-48.png",
