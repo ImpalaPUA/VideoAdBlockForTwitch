@@ -1,15 +1,17 @@
 function removeVideoAds() {
 
     function declareOptions(scope) {
-        scope.AD_SIGNIFIER = 'stitched-ad';
-        scope.CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
-        scope.OPT_ACCESS_TOKEN_PLAYER_TYPE = 'thunderdome'; //480p
-        //scope.OPT_ACCESS_TOKEN_PLAYER_TYPE = 'pop_tart'; //480p
-        //scope.OPT_ACCESS_TOKEN_PLAYER_TYPE = 'picture-by-picture';//360p
+        scope.AdSignifier = 'stitched-ad';
+        scope.ClientID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+        scope.PlayerType1 = 'site'; //Source
+        scope.PlayerType2 = 'thunderdome'; //480p
+        scope.PlayerType3 = 'pop_tart'; //480p
+        scope.PlayerType4 = 'picture-by-picture'; //360p
         scope.CurrentChannelNameFromM3U8 = null;
         scope.RootM3U8Params = null;
         scope.WasShowingAd = false;
-        scope.gql_device_id = null;
+        scope.GQLDeviceID = null;
+        scope.AdFreeWeaverURL = null;
     }
 
     declareOptions(window);
@@ -43,7 +45,7 @@ function removeVideoAds() {
                 declareOptions(self);
                 self.addEventListener('message', function(e) {
                     if (e.data.key == 'UpdateDeviceId') {
-                        gql_device_id = e.data.value;
+                        GQLDeviceID = e.data.value;
                     }
                 });
                 hookWorkerFetch();
@@ -53,19 +55,23 @@ function removeVideoAds() {
             twitchMainWorker = this;
             this.onmessage = function(e) {
                 if (e.data.key == 'ShowAdBlockBanner') {
-                    if (adBlockDiv == null) { adBlockDiv = getAdBlockDiv(); }
-                    adBlockDiv.P.textContent = 'Waiting for ads to finish...';
+                    if (adBlockDiv == null) {
+                        adBlockDiv = getAdBlockDiv();
+                    }
+                    adBlockDiv.P.textContent = 'Skipping ads...';
                     adBlockDiv.style.display = 'block';
-                }
-                else if (e.data.key == 'HideAdBlockBanner') {
-                    if (adBlockDiv == null) { adBlockDiv = getAdBlockDiv(); }
+                } else if (e.data.key == 'HideAdBlockBanner') {
+                    if (adBlockDiv == null) {
+                        adBlockDiv = getAdBlockDiv();
+                    }
                     adBlockDiv.style.display = 'none';
-                }
-                else if (e.data.key == 'PauseResumePlayer') {
+                } else if (e.data.key == 'PauseResumePlayer') {
                     reloadTwitchPlayer(true);
                 }
             }
+
             function getAdBlockDiv() {
+                //To display a notification to the user, that an ad is being blocked.
                 var playerRootDiv = document.querySelector('.video-player');
                 var adBlockDiv = null;
                 if (playerRootDiv != null) {
@@ -91,23 +97,43 @@ function removeVideoAds() {
         return req.responseText.split("'")[1];
     }
 
-    async function processM3U8(url, textStr, realFetch) {
+    async function processM3U8(url, textStr, realFetch, playerType) {
+        //Checks the m3u8 for ads and if it finds one, instead returns an ad-free stream.
 
         if (!textStr) {
-        return textStr;
-        }
-        
-        if (!textStr.includes(".ts")) {
-        return textStr;
+            return textStr;
         }
 
-        var haveAdTags = textStr.includes(AD_SIGNIFIER);
+        if (!textStr.includes(".ts")) {
+            return textStr;
+        }
+
+        var haveAdTags = textStr.includes(AdSignifier);
 
         if (haveAdTags) {
+            //Here we check if there is a saved m3u8 to prevent multiple requests. 
+            //Disabled at the moment to test ad-free source quality methods.
+            if (AdFreeWeaverURL) {
+                var savedStreamM3u8Response = await realFetch(AdFreeWeaverURL);
+                if (savedStreamM3u8Response.status == 200) {
+                    var savedm3u8Text = await savedStreamM3u8Response.text();
+                    if (!savedm3u8Text.includes(AdSignifier)) {
+                        return savedm3u8Text;
+                    } else {
+                        AdFreeWeaverURL = null;
+                    }
+                } else {
+                    AdFreeWeaverURL = null;
+                }
+            }
+
+            //Reduces ad frequency (maybe).
             try {
-            var doAdCompleteRequests = await tryNotifyAdsWatchedM3U8(textStr);
-            } catch(err) {}
-            var accessTokenResponse = await getAccessToken(CurrentChannelNameFromM3U8, OPT_ACCESS_TOKEN_PLAYER_TYPE);
+                var doAdCompleteRequests = await tryNotifyAdsWatchedM3U8(textStr);
+            } catch (err) {}
+
+            var accessTokenResponse = await getAccessToken(CurrentChannelNameFromM3U8, playerType);
+
             if (accessTokenResponse.status === 200) {
 
                 var accessToken = await accessTokenResponse.json();
@@ -123,11 +149,16 @@ function removeVideoAds() {
 
                     var streamM3u8Response = await realFetch(streamM3u8Url);
                     if (streamM3u8Response.status == 200) {
+                        var m3u8Text = await streamM3u8Response.text();
+                        if (!m3u8Text.includes(AdSignifier)) {
+                            //Disabled while testing source quality methods.
+                            //AdFreeWeaverURL = streamM3u8Url;
+                        }
                         WasShowingAd = true;
                         postMessage({
                             key: 'ShowAdBlockBanner'
                         });
-                        return streamM3u8Response.text();
+                        return m3u8Text;
                     } else {
                         return textStr;
                     }
@@ -139,6 +170,7 @@ function removeVideoAds() {
             }
         } else {
             if (WasShowingAd) {
+                AdFreeWeaverURL = null;
                 WasShowingAd = false;
                 postMessage({
                     key: 'PauseResumePlayer'
@@ -155,14 +187,14 @@ function removeVideoAds() {
     function parseAttributes(str) {
         return Object.fromEntries(
             str.split(/(?:^|,)((?:[^=]*)=(?:"[^"]*"|[^,]*))/)
-                .filter(Boolean)
-                .map(x => {
-                    const idx = x.indexOf('=');
-                    const key = x.substring(0, idx);
-                    const value = x.substring(idx +1);
-                    const num = Number(value);
-                    return [key, Number.isNaN(num) ? value.startsWith('"') ? JSON.parse(value) : value : num]
-                }));
+            .filter(Boolean)
+            .map(x => {
+                const idx = x.indexOf('=');
+                const key = x.substring(0, idx);
+                const value = x.substring(idx + 1);
+                const num = Number(value);
+                return [key, Number.isNaN(num) ? value.startsWith('"') ? JSON.parse(value) : value : num]
+            }));
     }
 
     async function tryNotifyAdsWatchedM3U8(streamM3u8) {
@@ -187,25 +219,25 @@ function removeVideoAds() {
             };
             for (let podPosition = 0; podPosition < podLength; podPosition++) {
                 const extendedData = {
-                        ...baseData,
-                        ad_id: adId,
-                        ad_position: podPosition,
-                        duration: 30,
-                        creative_id: creativeId,
-                        total_ads: podLength,
-                        order_id: orderId,
-                        line_item_id: lineItemId,
-                    };
-                    await gqlRequest(adRecordgqlPacket('video_ad_impression', radToken, extendedData));
-                    for (let quartile = 0; quartile < 4; quartile++) {
-                        await gqlRequest(
-                            adRecordgqlPacket('video_ad_quartile_complete', radToken, {
-                                ...extendedData,
-                                quartile: quartile + 1,
-                            })
-                        );
-                    }
-                    await gqlRequest(adRecordgqlPacket('video_ad_pod_complete', radToken, baseData));
+                    ...baseData,
+                    ad_id: adId,
+                    ad_position: podPosition,
+                    duration: 30,
+                    creative_id: creativeId,
+                    total_ads: podLength,
+                    order_id: orderId,
+                    line_item_id: lineItemId,
+                };
+                await gqlRequest(adRecordgqlPacket('video_ad_impression', radToken, extendedData));
+                for (let quartile = 0; quartile < 4; quartile++) {
+                    await gqlRequest(
+                        adRecordgqlPacket('video_ad_quartile_complete', radToken, {
+                            ...extendedData,
+                            quartile: quartile + 1,
+                        })
+                    );
+                }
+                await gqlRequest(adRecordgqlPacket('video_ad_pod_complete', radToken, baseData));
             }
         }
         return true;
@@ -218,8 +250,20 @@ function removeVideoAds() {
                 if (url.includes('video-weaver')) {
                     return new Promise(function(resolve, reject) {
                         var processAfter = async function(response) {
-                            var str = await processM3U8(url, await response.text(), realFetch);
-                            resolve(new Response(str));
+                            //Here we check the m3u8 for any ads and also try fallback player types if needed.
+                            //We first check if we can get a source quality ad-free stream.
+                            var responseText = await response.text();
+                            var weaverText = await processM3U8(url, responseText, realFetch, PlayerType1);
+                            if (weaverText.includes(AdSignifier)) {
+                                weaverText = await processM3U8(url, responseText, realFetch, PlayerType2);
+                            }
+                            if (weaverText.includes(AdSignifier)) {
+                                weaverText = await processM3U8(url, responseText, realFetch, PlayerType3);
+                            }
+                            if (weaverText.includes(AdSignifier)) {
+                                weaverText = await processM3U8(url, responseText, realFetch, PlayerType4);
+                            }
+                            resolve(new Response(weaverText));
                         };
                         var send = function() {
                             return realFetch(url, options).then(function(response) {
@@ -233,15 +277,13 @@ function removeVideoAds() {
                 } else if (url.includes('/api/channel/hls/')) {
                     var channelName = (new URL(url)).pathname.match(/([^\/]+)(?=\.\w+$)/)[0];
                     RootM3U8Params = (new URL(url)).search;
+                    AdFreeWeaverURL = null;
                     CurrentChannelNameFromM3U8 = channelName;
-
-                    //Needed to prevent pause/resume loop for mid-rolls.
-                    //Not needed if gql request fails correctly in hookFetch function.
+                    //To prevent pause/resume loop for mid-rolls.
                     var isPBYPRequest = url.includes('picture-by-picture');
                     if (isPBYPRequest) {
-                    url = '';
+                        url = '';
                     }
-
                 }
             }
             return realFetch.apply(this, arguments);
@@ -267,19 +309,19 @@ function removeVideoAds() {
 
     function gqlRequest(body, realFetch) {
         var fetchFunc = realFetch ? realFetch : fetch;
-        if (!gql_device_id) {
-        var dcharacters = 'abcdefghijklmnopqrstuvwxyz0123456789';
-        var dcharactersLength = dcharacters.length;
-        for (var i = 0; i < 32; i++) {
-            gql_device_id += dcharacters.charAt(Math.floor(Math.random() * dcharactersLength));
-        }
+        if (!GQLDeviceID) {
+            var dcharacters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            var dcharactersLength = dcharacters.length;
+            for (var i = 0; i < 32; i++) {
+                GQLDeviceID += dcharacters.charAt(Math.floor(Math.random() * dcharactersLength));
+            }
         }
         return fetchFunc('https://gql.twitch.tv/gql', {
             method: 'POST',
             body: JSON.stringify(body),
             headers: {
-                'client-id': CLIENT_ID,
-                'X-Device-Id': gql_device_id
+                'client-id': ClientID,
+                'X-Device-Id': GQLDeviceID
             }
         });
     }
@@ -304,6 +346,7 @@ function removeVideoAds() {
     }
 
     function reloadTwitchPlayer(isPausePlay) {
+        //This will do an instant pause/play to return to original quality once the ad is finished.
         function findReactNode(root, constraint) {
             if (root.stateNode && constraint(root.stateNode)) {
                 return root.stateNode;
@@ -350,30 +393,28 @@ function removeVideoAds() {
         window.fetch = function(url, init, ...args) {
             if (typeof url === 'string') {
                 if (url.includes('/access_token') || url.includes('gql')) {
+                    //Device ID is used when notifying ads as watched, to slow ad frequency.
                     var deviceId = init.headers['X-Device-Id'];
                     if (typeof deviceId !== 'string') {
                         deviceId = init.headers['Device-ID'];
                     }
                     if (typeof deviceId === 'string') {
-                        gql_device_id = deviceId;
+                        GQLDeviceID = deviceId;
                     }
-                    if (gql_device_id && twitchMainWorker) {
+                    if (GQLDeviceID && twitchMainWorker) {
                         twitchMainWorker.postMessage({
                             key: 'UpdateDeviceId',
-                            value: gql_device_id
+                            value: GQLDeviceID
                         });
                     }
-
-                    //Needed to prevent pause/resume loop for mid-rolls. Needs testing.
+                    //To prevent pause/resume loop for mid-rolls.
                     if (url.includes('gql') && init && typeof init.body === 'string' && init.body.includes('PlaybackAccessToken') && init.body.includes('picture-by-picture')) {
-                    init.body = '';
+                        init.body = '';
                     }
-                    //Not needed if gql request fails correctly.
                     var isPBYPRequest = url.includes('picture-by-picture');
                     if (isPBYPRequest) {
-                    url = '';
+                        url = '';
                     }
-
                 }
             }
             return realFetch.apply(this, arguments);
