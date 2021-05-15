@@ -1,6 +1,6 @@
 # VideoAdBlockForTwitch
 
-Swaps Twitch video ads for an ad-free 480p stream and then automatically switches back to original quality once the ad is done.
+Swaps Twitch video ads for an ad-free stream between 1080p and 480p quality and then automatically switches back to original quality once the ad is done.
 
 Chrome: https://chrome.google.com/webstore/detail/video-ad-block-for-twitch/kgeglempfkhalebjlogemlmeakondflc
 
